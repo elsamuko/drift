@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <script type="application/x-javascript">
+
+            //env values
+            var finish = false;
+            var points = 0;
+            var last_points = 0;
+            var points_max = 0;
+            
+            //canvas
+            var ctx;
+            var oheight = window.innerHeight-25;
+            var owidth = window.innerWidth-25;
+            
+            //tracks
+            var max_tracks=50;
+            var tracks = new Array(max_tracks); 
+            for (var k=0; k<max_tracks; k++){
+                tracks[k] = new track(0,0,0,false);
+            }
+            var first_track=0;
+            
+            //control
+            var steerleft  = false;
+            var steerright = false;
+            var accelup    = false;
+            var acceldown  = false;
+            var show_parking = true;
+            
+            //parameters
+            var posx   = 100; //position
+            var posy   = 100;
+            var momx   = 0;   //momentum
+            var momy   = 0;
+            var speed  = 0;   //abs(momentum)
+            var accel  = 0;   //acceleration
+            var steer  = 0;   //steering
+            var dphi   = 0;   //drift angle
+            var phi    = 0;   //angle
+            var tmp    = 0;
+            
+            //measure time
+            var start_time;
+            var elapsed_time;
+            var counter=0;
+            
+            var img = new Image();
+            
+            function track(posxin,posyin,phiin,visiblein) {
+                this.posx    = posxin;
+                this.posy    = posyin;
+                this.phi     = phiin;
+                this.visible = visiblein;
+            }
+
+            function init() {
+                var canvas = document.getElementsByTagName('canvas')[0];
+                canvas.width = owidth;
+                canvas.height = oheight;
+                ctx = canvas.getContext('2d');
+                
+                document.onkeydown = keyDown;
+                document.onkeyup = keyUp;
+                
+                img.src =  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAAXNSR0IArs4c6QAAAAlwSFlzAAALEwAACxMBAJqcGAAAAAd0SU1FB9oGCw8pLFryU30AAAAZdEVYdENvbW1lbnQAQ3JlYXRlZCB3aXRoIEdJTVBXgQ4XAAAAQUlEQVQoz2P8//8/AymAiYFEwAKhGBkZ4UL47STZBia4qUR6hlw/IANk/yADiBPI9QPt4wHTrbh8NQj9wEjz1AoAQN8VGQ9hHIcAAAAASUVORK5CYII=";
+                
+                start_time = new Date().getTime();
+                timer = setTimeout('start()', 200);
+            }
+            
+            function keyDown(e){
+                if(e.keyCode==83){ //'s'
+                    if(finish) {
+                        finish = false;
+                        timer = setTimeout('start()', 40);
+                    }else{
+                        finish = true;
+                    }
+                }
+                if(e.keyCode==80){ //'p'
+                    if(show_parking) {
+                        show_parking = false;
+                    }else{
+                        show_parking = true;
+                    }
+                }
+                if(e.keyCode==37){ //left
+                    if(steer>-60) steerleft = true;
+                }
+                if(e.keyCode==38){ //up
+                    accelup = true;
+                }
+                if(e.keyCode==39){ //right
+                    if(steer<60) steerright = true;
+                }
+                if(e.keyCode==40){ //down
+                    if(accel>-50) acceldown = true;
+                }
+            }
+
+            function keyUp(e){
+                if(e.keyCode==37){ //left
+                    steerleft=false;
+                }
+                if(e.keyCode==38){ //up
+                    accelup = false;
+                }
+                if(e.keyCode==39){ //right
+                    steerright = false;
+                }
+                if(e.keyCode==40){ //down
+                    acceldown = false;
+                }
+            }
+
+            function start() {
+                calc_new_vals();
+                score();
+                draw();
+                if(!(counter%25)){
+                    elapsed_time = new Date().getTime()-start_time;
+                    start_time = new Date().getTime();
+                    counter=0;
+                }
+                counter++;
+                if (! (finish)) {
+                    timer = setTimeout('start()', 40);
+                } else {
+                    end();
+                }
+            }
+            
+            function calc_new_vals() {
+                if(steerleft) steer--;
+                if(steerright) steer++;
+                if(accelup){
+                    accel = 1;
+                }else{
+                    accel = 0;
+                }
+                if(acceldown) accel = -1;
+                
+                speed = momx*momx + momy*momy;
+                if(speed>0.5) phi += Math.PI*steer/180;
+                else momx=momy=0;
+                
+                momx += accel * Math.cos(phi);
+                momy += accel * Math.sin(phi);
+
+                steer *= 0.8;
+                if(accel>0 && steer<25) {
+                    steer *= 1.3;
+                }
+                
+                dphi = phi-Math.atan(momy/momx);
+                if(!isNaN(dphi)){
+                    tmp = 0.86+0.14*Math.abs(Math.cos(dphi));
+                    momx *= tmp;
+                    momy *= tmp;
+                }else dphi=0;
+                
+                posx += momx;
+                posy += momy;
+
+                momx *= 0.95;
+                momy *= 0.95;
+
+                if(momx>100)  momx=100;
+                if(momx<-100) momx=-100;
+                if(momy>100)  momy=100;
+                if(momy<-100) momy=-100;
+
+                //border constraints
+                if(posx>owidth){
+                    posx=owidth;
+                    dphi=0;
+                    momx*=0.7;
+                    momy*=0.7;
+                }
+                if(posx<0){
+                    posx=0;
+                    dphi=0;
+                    momx*=0.7;
+                    momy*=0.7;
+
+                }
+                if(posy>oheight){
+                    posy=oheight;
+                    dphi=0;
+                    momx*=0.7;
+                    momy*=0.7;
+                }
+                if(posy<0){
+                    posy=0;
+                    dphi=0;
+                    momx*=0.7;
+                    momy*=0.7;
+                }
+                
+                phi %= (2*Math.PI);
+            }
+            
+            function sgn(x){
+                if(x>0)return 1;
+                else if(x<0)return -1;
+                else return 0;
+            }
+            
+            function score() {
+                if(Math.abs(dphi)>0.0175 && speed>60 && !acceldown){
+                    points++;
+                    tracks[first_track].posx=posx;
+                    tracks[first_track].posy=posy;
+                    tracks[first_track].phi =phi;
+                    tracks[first_track].visible = true;
+                }else{
+                    tracks[first_track].visible = false;
+                    if(points>10) last_points=points;
+                    points=0;
+                }
+                if(points>points_max) points_max=points;
+                
+                first_track++;
+                first_track %= max_tracks;
+            }
+            
+            function draw() {
+                //clean
+                if(show_parking){
+                    ctx.fillStyle = "silver";
+                    ctx.fillRect(0, 0, owidth, oheight);
+                    ctx.fillStyle = "black";
+                }else ctx.clearRect(0, 0, owidth, oheight); // clear canvas
+                
+                //info
+                ctx.fillText("ACCEL: " + accel, 10, 20);
+                ctx.fillText("SPEED: " + Math.round(speed), 10, 40);
+                ctx.fillText("PHI: " + Math.round(phi*100)/100, 210, 20);
+                ctx.fillText("DPHI: " + Math.round(dphi*100)/100, 210, 40);
+                ctx.fillText("POINTS: " + points, 410, 20);
+                ctx.fillText("MAX: " + points_max, 410, 40);
+                ctx.fillText("LAST: " + last_points, 610, 20);
+                ctx.fillText("TIME: " + (elapsed_time-1000), 610, 40);
+
+                
+                //tracks
+                for (var i=0; i<max_tracks; i++){
+                    var pos=(i+first_track)%max_tracks;
+                    if(tracks[pos].visible){
+                        ctx.save();
+                        ctx.translate(tracks[pos].posx,tracks[pos].posy);  
+                        ctx.rotate(tracks[pos].phi);
+                        ctx.fillRect(-20, -10, 2, 20);
+                        ctx.restore();
+                    }
+                }
+                
+                //car
+                ctx.save();
+                ctx.translate(posx,posy);  
+                ctx.rotate(phi);
+                ctx.fillRect(-20, -10, 40, 20);
+                ctx.fillRect(21, -10, 2, 20);
+                ctx.drawImage(img, -15, -8);
+                ctx.restore();
+            }
+ 
+            function end(){
+                clearTimeout(timer);
+            }
+ 
+        </script>
+</head>
+
+<body onload="init()">
+    <canvas id="canvas" width="800" height="600">
+        <p> This demo requires a browser that supports the <a href="http://www.w3.org/html/wg/html5/"> HTML5 </a>
+            &lt;canvas&gt; feature.</p>
+    </canvas>
+</body>
+
+</html>
